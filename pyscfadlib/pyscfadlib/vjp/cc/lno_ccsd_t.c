@@ -2,6 +2,7 @@
 #include "config.h"
 #include "vhf/fblas.h"
 #include "vjp/cc/ccsd_t.h"
+#include "vjp/util/util.h"
 
 static double lnoccsdt_get_energy(double *mat, double *w, double *v,
                                   double *mo_energy, int nocc,
@@ -105,10 +106,13 @@ void lnoccsdt_contract(double *e_tot, double *mat,
                                          cache, sizeof(double));
         int *permute_idx = malloc(sizeof(int) * nocc*nocc*nocc * 6);
         _make_permute_indices(permute_idx, nocc);
+        const int max_threads = omp_get_max_threads_safe();
+        double *e_bufs = calloc(max_threads, sizeof(double));
 #pragma omp parallel default(none) \
         shared(njobs, nocc, nvir, mat, mo_energy, t1T, t2T,\
-               vooo, fvo, jobs, e_tot, permute_idx)
+               vooo, fvo, jobs, permute_idx, e_bufs)
 {
+        int thread_id = omp_get_thread_num();
         int a, b, c;
         size_t k;
         double *cache1 = malloc(sizeof(double) * (nocc*nocc*nocc*3+2));
@@ -119,7 +123,7 @@ void lnoccsdt_contract(double *e_tot, double *mat,
                 fvohalf[k] = fvo[k] * .5;
         }
         double e = 0;
-#pragma omp for schedule (dynamic, 4)
+#pragma omp for schedule (static, 4)
         for (k = 0; k < njobs; k++) {
                 a = jobs[k].a;
                 b = jobs[k].b;
@@ -130,9 +134,13 @@ void lnoccsdt_contract(double *e_tot, double *mat,
         }
         free(t1Thalf);
         free(cache1);
-#pragma omp critical
-        *e_tot += e;
+        e_bufs[thread_id] = e;
 }
+        int thread_id;
+        for (thread_id = 0; thread_id < max_threads; thread_id++) {
+                *e_tot += e_bufs[thread_id];
+        }
+        free(e_bufs);
         free(permute_idx);
         free(jobs);
 }

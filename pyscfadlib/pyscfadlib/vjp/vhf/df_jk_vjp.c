@@ -4,8 +4,6 @@
 #include "vhf/fblas.h"
 #include "vjp/util/util.h"
 
-#define MAX_THREADS     128
-
 // vk_bar in F order
 // eri_bar = einsum('pki,ij->pkj', buf1, vk_bar)
 // buf1_bar = einsum('ij,pkj->pki', vk_bar, eri)
@@ -54,7 +52,7 @@ void df_vk_vjp(double *eri_tril_bar, double *dm_bar,
 {
     const size_t nao2 = (size_t)nao * nao;
     const size_t nao_pair = (size_t)nao * (nao+1) /2;
-    double *dm_bar_bufs[MAX_THREADS];
+    double **dm_bar_bufs = calloc(omp_get_max_threads_safe(), sizeof(double *));
     #pragma omp parallel
     {
         int i;
@@ -67,7 +65,7 @@ void df_vk_vjp(double *eri_tril_bar, double *dm_bar,
         }
         dm_bar_bufs[thread_id] = dm_bar_priv;
         double *cache = malloc(nao2*2 * sizeof(double));
-        #pragma omp for schedule(dynamic)
+        #pragma omp for schedule(static)
         for (i = 0; i < naux; i++) {
             _contract_vk(eri_tril_bar+i*nao_pair, dm_bar_priv,
                          vk_bar, buf1+i*nao2, eri_tril+i*nao_pair, dm,
@@ -80,4 +78,5 @@ void df_vk_vjp(double *eri_tril_bar, double *dm_bar,
             free(dm_bar_priv);
         }
     }
+    free(dm_bar_bufs);
 }

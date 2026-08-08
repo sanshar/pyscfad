@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include "config.h"
 #include "cint.h"
+#include "vjp/util/util.h"
 
 #define MIN(X, Y)       ((X) < (Y) ? (X) : (Y))
 #define MAX(X, Y)       ((X) > (Y) ? (X) : (Y))
@@ -224,13 +225,21 @@ void GTOnr2e_fill_r0_vjp(int (*intor)(), void (*fill)(), int (*fprescreen)(),
     const int cache_size = GTOmax_cache_size(intor, shls_slice, 4,
                                              atm, natm, bas, nbas, env);
 
+    double **vjp_loc_bufs = calloc(omp_get_max_threads_safe(), sizeof(double *));
 #pragma omp parallel
 {
-    double *vjp_loc = calloc(natm*comp, sizeof(double));
+    int thread_id = omp_get_thread_num();
+    double *vjp_loc;
+    if (thread_id == 0) {
+        vjp_loc = vjp;
+    } else {
+        vjp_loc = calloc(natm*comp, sizeof(double));
+    }
+    vjp_loc_bufs[thread_id] = vjp_loc;
 
     int ij, i, j;
     double *buf = malloc(sizeof(double) * (di*di*di*di*comp + cache_size));
-    #pragma omp for schedule(dynamic)
+    #pragma omp for schedule(static)
     for (ij = 0; ij < nish*njsh; ij++) {
         i = ij / njsh;
         j = ij % njsh;
@@ -239,12 +248,12 @@ void GTOnr2e_fill_r0_vjp(int (*intor)(), void (*fill)(), int (*fprescreen)(),
     }
     free(buf);
 
-    for (i = 0; i < natm*comp; i++) {
-        #pragma omp atomic
-        vjp[i] += vjp_loc[i];
+    omp_dsum_reduce_inplace(vjp_loc_bufs, natm*comp);
+    if (thread_id != 0) {
+        free(vjp_loc);
     }
-    free(vjp_loc);
 }
+    free(vjp_loc_bufs);
 
     //minus sign for nuclear derivative
     int i;

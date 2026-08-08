@@ -179,7 +179,7 @@ void GTOoverlap_cond(double *cond, int *shls_slice,
         int ish, jsh, ip, jp, li, lj, iprim, jprim;
         double aij, eij, cceij, min_cceij, log_rr_ij, dx, dy, dz, rr_ij;
         double *ai, *aj, *ri, *rj, *log_maxci, *log_maxcj;
-#pragma omp for nowait schedule(static)
+#pragma omp for schedule(static)
         for (ish = ish0; ish < ish1; ish++) {
         for (jsh = jsh0; jsh < jsh1; jsh++) {
                 iprim = bas(NPRIM_OF, ish);

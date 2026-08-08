@@ -347,6 +347,7 @@ class DLNOCCSD(lno_base_mpi_mod.LNO, _DLNOCCSDSingle):
             weight = 1.0
 
             def per_frag_fn(mf_, lo_coeff_,
+                            _ifrag=ifrag,
                             _fraglo=fraglo_idx,
                             _frag_prescreen=frag_prescreen,
                             _weight=weight):
@@ -364,12 +365,16 @@ class DLNOCCSD(lno_base_mpi_mod.LNO, _DLNOCCSDSingle):
                 )
                 cc_local.domain_mp2_method = mp2_correction_method
                 cc_local.domain_sos_mp2_c_os = sos_c_os
+                
+                cc_local.use_dlno_prescreen = True
+                cc_local.dlno_prescreen_data = _frag_prescreen
 
                 orbfragloc = lo_coeff_[:, _fraglo]
                 stub_eris = _make_stub_eris(mf_)
                 eris_fpno = lno_base.make_fragment_eris(
                     cc_local, stub_eris, _frag_prescreen,
                 )
+                t_fpno1 = time.perf_counter()
                 frzfrag, orbfrag, domain_pt2 = lno_base.make_fpno1(
                     cc_local, eris_fpno, orbfragloc, no_type,
                     lno_base.THRESH_INTERNAL,
@@ -377,6 +382,11 @@ class DLNOCCSD(lno_base_mpi_mod.LNO, _DLNOCCSDSingle):
                     frag_prescreen=_frag_prescreen,
                     frozen_mask=cc_local.get_frozen_mask(),
                 )
+                if verbose >= _VERBOSE_PROGRESS:
+                    print(f'  [rank {rank}] [frag {_ifrag+1}/{nfrag}] '
+                          f'make_fpno1:          '
+                          f'{time.perf_counter() - t_fpno1:8.2f} s',
+                          flush=True)
 
                 if orbfrag is None:
                     contribution = (
@@ -405,6 +415,10 @@ class DLNOCCSD(lno_base_mpi_mod.LNO, _DLNOCCSDSingle):
                     dcsd=cc_local.dcsd,
                     profile_info=None,
                     profile_pass=getattr(cc_local, 'profile_pass', None),
+                    pt2_fragment_method=(
+                        mp2_correction_method if include_mp2_correction else 'mp2'
+                    ),
+                    sos_c_os=sos_c_os,
                 )
                 e_pt2_frag, e_cc_frag, e_cc_t_frag = res
 

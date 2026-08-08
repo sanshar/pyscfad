@@ -4,7 +4,6 @@
 #include "vhf/fblas.h"
 #include "vjp/util/util.h"
 
-#define MAX_THREADS     128
 #define OUTPUTIJ        1
 #define INPUT_IJ        2
 
@@ -170,7 +169,7 @@ void AO2MOnr_e2_vjp_drv(void (*ftrans)(), int (*fmmm)(),
     envs.nmo = nmo;
     envs.mo_coeff = mo_coeff;
 
-    double *mo_coeff_bar_bufs[MAX_THREADS];
+    double **mo_coeff_bar_bufs = calloc(omp_get_max_threads_safe(), sizeof(double *));
     #pragma omp parallel
     {
         int i;
@@ -185,7 +184,7 @@ void AO2MOnr_e2_vjp_drv(void (*ftrans)(), int (*fmmm)(),
         }
         mo_coeff_bar_bufs[thread_id] = mo_coeff_bar_priv;
         double *buf = malloc(sizeof(double) * (nao*nao*2 + nao*MIN(i_count, j_count)));
-        #pragma omp for schedule(dynamic)
+        #pragma omp for schedule(static)
         for (i = 0; i < nij; i++) {
             (*ftrans)(fmmm, i, eri_bar, mo_coeff_bar_priv, eri, ybar, buf, &envs);
         }
@@ -196,6 +195,7 @@ void AO2MOnr_e2_vjp_drv(void (*ftrans)(), int (*fmmm)(),
             free(mo_coeff_bar_priv);
         }
     }
+    free(mo_coeff_bar_bufs);
 }
 
 
@@ -287,7 +287,7 @@ void AO2MOnr_e2_cderi_bar_project_omp(
     {
         double *tmp = malloc(sizeof(double) * (size_t)m * block);
 
-#pragma omp for schedule(dynamic)
+#pragma omp for schedule(static)
         for (int ib = 0; ib < nblocks; ib++) {
             const int p0 = ib * block;
             const int nb = (p0 + block <= npos) ? block : (npos - p0);

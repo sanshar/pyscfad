@@ -16,6 +16,7 @@
 #include "config.h"
 #include "cint.h"
 #include "gto/gto.h"
+#include "vjp/util/util.h"
 
 #define MIN(X, Y)       ((X) < (Y) ? (X) : (Y))
 #define MAX(X, Y)       ((X) > (Y) ? (X) : (Y))
@@ -188,23 +189,31 @@ void GTOnr3c_ij_r0_vjp(int (*intor)(), void (*fill)(), double *vjp, double *ybar
                                                  atm, natm, bas, nbas, env);
         const int njobs = (MAX(nish,njsh) / BLKSIZE + 1) * nksh;
 
+        double **vjp_loc_bufs = calloc(omp_get_max_threads_safe(), sizeof(double *));
 #pragma omp parallel
 {
-        int i, jobid;
+        int thread_id = omp_get_thread_num();
+        int jobid;
         double *buf = malloc(sizeof(double) * (di*di*di*comp + cache_size));
-        double *vjp_loc = calloc(natm_ij*comp, sizeof(double));
+        double *vjp_loc;
+        if (thread_id == 0) {
+                vjp_loc = vjp;
+        } else {
+                vjp_loc = calloc(natm_ij*comp, sizeof(double));
+        }
+        vjp_loc_bufs[thread_id] = vjp_loc;
 
-        #pragma omp for schedule(dynamic)
+        #pragma omp for schedule(static)
         for (jobid = 0; jobid < njobs; jobid++) {
                 (*fill)(intor, vjp_loc, ybar, buf, comp, jobid, shls_slice, ao_loc,
                         cintopt, atm, natm, bas, nbas, env);
         }
         free(buf);
 
-        for (i = 0; i < natm_ij*comp; i++) {
-            #pragma omp atomic
-            vjp[i] += vjp_loc[i];
+        omp_dsum_reduce_inplace(vjp_loc_bufs, natm_ij*comp);
+        if (thread_id != 0) {
+                free(vjp_loc);
         }
-        free(vjp_loc);
 }
+        free(vjp_loc_bufs);
 }

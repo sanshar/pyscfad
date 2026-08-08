@@ -4,8 +4,6 @@
 #include "vjp/cc/ccsd_t.h"
 #include "vjp/util/util.h"
 
-#define MAX_THREADS 128
-
 static void get_wz(double *w0_mat, double *w0, double* z0,
                    int nocc, int nvir, int a, int b, int c,
                    double *mat, double *mo_energy, double *t1T, double *t2T,
@@ -434,17 +432,18 @@ void lnoccsdt_energy_vjp(double *mat, double *mo_energy, double *t1T, double *t2
         fvohalf[k] = fvo[k] * .5;
     }
 
-    double *mat_bar_bufs[MAX_THREADS];
-    double *mo_energy_bar_bufs[MAX_THREADS];
-    double *t1T_bar_bufs[MAX_THREADS];
-    double *t2T_bar_bufs[MAX_THREADS];
-    double *vooo_bar_bufs[MAX_THREADS];
-    double *fvo_bar_bufs[MAX_THREADS];
+    const int max_threads = omp_get_max_threads_safe();
+    double **mat_bar_bufs = calloc(max_threads, sizeof(double *));
+    double **mo_energy_bar_bufs = calloc(max_threads, sizeof(double *));
+    double **t1T_bar_bufs = calloc(max_threads, sizeof(double *));
+    double **t2T_bar_bufs = calloc(max_threads, sizeof(double *));
+    double **vooo_bar_bufs = calloc(max_threads, sizeof(double *));
+    double **fvo_bar_bufs = calloc(max_threads, sizeof(double *));
 
-    double *cache_row_a_bar_bufs[MAX_THREADS];
-    double *cache_col_a_bar_bufs[MAX_THREADS];
-    double *cache_row_b_bar_bufs[MAX_THREADS];
-    double *cache_col_b_bar_bufs[MAX_THREADS];
+    double **cache_row_a_bar_bufs = calloc(max_threads, sizeof(double *));
+    double **cache_col_a_bar_bufs = calloc(max_threads, sizeof(double *));
+    double **cache_row_b_bar_bufs = calloc(max_threads, sizeof(double *));
+    double **cache_col_b_bar_bufs = calloc(max_threads, sizeof(double *));
 
     #pragma omp parallel
     {
@@ -513,7 +512,7 @@ void lnoccsdt_energy_vjp(double *mat, double *mo_energy, double *t1T, double *t2
         int a, b, c;
         size_t k;
         double *cache1 = malloc(sizeof(double) * (nocc*nocc*nocc*6 + 2));
-        #pragma omp for schedule(dynamic)
+        #pragma omp for schedule(static)
         for (k = 0; k < njobs; k++) {
             a = jobs[k].a;
             b = jobs[k].b;
@@ -563,4 +562,14 @@ void lnoccsdt_energy_vjp(double *mat, double *mo_energy, double *t1T, double *t2
     free(jobs);
     free(permute_idx);
     free(t1Thalf);
+    free(mat_bar_bufs);
+    free(mo_energy_bar_bufs);
+    free(t1T_bar_bufs);
+    free(t2T_bar_bufs);
+    free(vooo_bar_bufs);
+    free(fvo_bar_bufs);
+    free(cache_row_a_bar_bufs);
+    free(cache_col_a_bar_bufs);
+    free(cache_row_b_bar_bufs);
+    free(cache_col_b_bar_bufs);
 }

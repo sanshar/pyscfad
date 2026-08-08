@@ -556,7 +556,7 @@ void GTOnr2e_fill_drv(int (*intor)(), void (*fill)(), int (*fprescreen)(),
 {
         int ij, i, j;
         double *buf = malloc(sizeof(double) * (di*di*di*di*comp + cache_size));
-#pragma omp for nowait schedule(dynamic)
+#pragma omp for schedule(dynamic)
         for (ij = 0; ij < nish*njsh; ij++) {
                 i = ij / njsh;
                 j = ij % njsh;
@@ -566,4 +566,3 @@ void GTOnr2e_fill_drv(int (*intor)(), void (*fill)(), int (*fprescreen)(),
         free(buf);
 }
 }
-

@@ -1,6 +1,7 @@
 import warnings
 
 import jax
+import jax.numpy as jnp
 import numpy
 
 from pyscfad import config, df, gto, scf
@@ -79,6 +80,50 @@ def _make_solver(mf, thresh, dlno_data=None):
     return mycc
 
 
+class _FakeEris:
+    def __init__(self, ovov):
+        self.ovov = ovov
+
+
+def test_projected_sos_fragment_energy_matches_direct_os_term():
+    ovov = jnp.asarray(
+        numpy.arange(3 * 2 * 3 * 2, dtype=float).reshape(3, 2, 3, 2) / 23.0
+        - 0.4
+    )
+    t2 = jnp.asarray(
+        numpy.arange(3 * 3 * 2 * 2, dtype=float).reshape(3, 3, 2, 2) / 19.0
+        - 0.7
+    )
+    prj = jnp.asarray([
+        [0.8, 0.3, -0.2],
+        [0.1, 0.5, 0.4],
+    ])
+    c_os = 1.3
+
+    m = prj.T @ prj
+    direct = jnp.einsum('pq,pjab,qajb->', m, t2, ovov)
+    exchange = jnp.einsum('pq,pjab,qbja->', m, t2, ovov)
+
+    e_sos = lnoccsd._sos_mp2_fragment_energy_jax(ovov, t2, prj, c_os)
+    e_full = lnoccsd.mp2_fragment_energy(_FakeEris(ovov), t2, prj)
+
+    assert abs(e_sos - c_os * direct) < 1e-12
+    assert abs(e_full - (2.0 * direct - exchange)) < 1e-12
+    assert abs(e_full - e_sos / c_os) > 1e-6
+
+    def energy_t2(t2_):
+        return lnoccsd._sos_mp2_fragment_energy_jax(ovov, t2_, prj, c_os)
+
+    grad_t2 = jax.grad(energy_t2)(t2)
+    idx = (1, 2, 0, 1)
+    eps = 1e-5
+    fd = (
+        energy_t2(t2.at[idx].add(eps))
+        - energy_t2(t2.at[idx].add(-eps))
+    ) / (2.0 * eps)
+    assert abs(grad_t2[idx] - fd) < 1e-7
+
+
 def _build_static_topology(mol, thresh, cderi_file):
     mf = _density_fit_from_cderi(mol, cderi_file)
     mf.kernel()
@@ -95,6 +140,48 @@ def _build_static_topology(mol, thresh, cderi_file):
         multipole_order=2,
     )
     return frag_lolist, topology
+
+
+def test_full_scope_mp2_correction_is_method_consistent_for_full_domains(tmp_path):
+    mol = _build_water()
+    thresh = 0.0
+    cderi_file = tmp_path / 'water-cderi-full-scope.h5'
+    _prepare_outcore_cderi(mol, cderi_file)
+    frag_lolist, _ = _build_static_topology(mol, thresh, cderi_file)
+
+    def build_mf(mol_):
+        mf = _density_fit_from_cderi(mol_, cderi_file)
+        mf.kernel()
+        return mf
+
+    common_kwargs = dict(
+        build_mf=build_mf,
+        frag_lolist=frag_lolist,
+        mp2_correction_scope='full',
+        frozen=0,
+        thresh_occ=thresh,
+        thresh_vir=thresh,
+        lo_type='iao',
+        no_type='ie',
+        ccsd_t=False,
+        lmo_bp_domain_thr=0.0,
+        pao_bp_domain_thr=0.0,
+        domain_pao_thr=0.0,
+        pair_energy_thr=0.0,
+        multipole_order=2,
+    )
+    e_uncorrected, _ = DLNOCCSD.value_and_grad(
+        mol, include_mp2_correction=False, **common_kwargs
+    )
+
+    for method in ('mp2', 'sos'):
+        e_corrected, _ = DLNOCCSD.value_and_grad(
+            mol,
+            include_mp2_correction=True,
+            mp2_correction_method=method,
+            **common_kwargs,
+        )
+        assert abs(e_corrected - e_uncorrected) < 1e-6
 
 
 def test_dlno_ccsd_gradient_matches_parent_lno_for_full_domains(tmp_path):
