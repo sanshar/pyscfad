@@ -52,7 +52,7 @@ def molecular_case(tmp_path_factory):
 @pytest.mark.parametrize('triples_mode,integral_transform',
                          [('stochastic', 'rotate'), ('deterministic', 'df')])
 @pytest.mark.parametrize('auxiliary_tolerance', [None, 1e-4])
-def test_default_half_matches_direct_with_one_integral_pass(
+def test_explicit_half_matches_default_direct_with_one_integral_pass(
         molecular_case, monkeypatch, triples_mode, integral_transform, auxiliary_tolerance):
     case = molecular_case
     controls = dict(mode=triples_mode, integral_transform=integral_transform)
@@ -85,7 +85,7 @@ def test_default_half_matches_direct_with_one_integral_pass(
     # Independent baseline: full, unsymmetrized pair adjoints and raw inputs.
     with monkeypatch.context() as original:
         original.setattr(_df_symmetric, 'same_orbital_pair', lambda slices: False)
-        reference, ref_gradient, ref_records, ref_bars = run('direct')
+        reference, ref_gradient, ref_records, ref_bars = run(None)
     assert receipts[-1]['raw_integral_builds'] == 2*(1+len(case.indices))
     reads = []
     generate = _df_direct._generate_local_raw_int3c_blocks
@@ -94,7 +94,7 @@ def test_default_half_matches_direct_with_one_integral_pass(
         assert len(reads) == 1, 'LIS and backward must reuse H_ED'
         yield from generate(*args, **kwargs)
     monkeypatch.setattr(_df_direct, '_generate_local_raw_int3c_blocks', once)
-    value, gradient, records, bars = run(None)
+    value, gradient, records, bars = run('half')
     assert reads == [1]
     receipt = receipts[-1]
     assert receipt['cache_mode'] == 'half'

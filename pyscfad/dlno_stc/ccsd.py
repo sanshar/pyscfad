@@ -333,8 +333,8 @@ def build_static_selections(mf, mp2_static, *, matrix_kind, thresh_occ, thresh_v
     LIS orbitals are selected directly in the orthonormal ED, retaining
     normalized domain projections of the physical Boys targets. Domain space
     is the only supported definition. Zero cutoffs retain the full ED.
-    Resident H_ED reuse is the default for energies and gradients; set
-    PYSCFAD_LNO_SHARED_LOCAL_DF_CACHE_MODE=direct for regeneration.
+    Direct integral regeneration is the default for energies and gradients; set
+    PYSCFAD_LNO_SHARED_LOCAL_DF_CACHE_MODE=half for resident H_ED reuse.
     """
     correlation_auxbasis = selection_auxbasis(mf, correlation_auxbasis)
     validate_selection_basis(mf, mp2_static, correlation_auxbasis)

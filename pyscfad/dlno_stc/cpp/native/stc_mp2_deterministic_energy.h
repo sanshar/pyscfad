@@ -94,7 +94,6 @@ inline deterministic_energy_result evaluate_deterministic_energy(stc_mp2_kernel&
             ++out.backprop_calls;
             out.backprop_seconds+=omp_get_wtime()-tick;
         }
-        std::cout<<"Deterministic selected point "<<l<<" complete\n"<<std::flush;
     }
     out.seconds=omp_get_wtime()-start;
     kernel.restore_original_integrals(true);

@@ -14,10 +14,13 @@ from pyscfad.lno import _df_shared
 
 @pytest.mark.parametrize('scope', ['system', 'domain'])
 @pytest.mark.parametrize('with_grad', [False, True])
-@pytest.mark.parametrize('cache_mode', ['direct', 'half'])
+@pytest.mark.parametrize('cache_mode', [None, 'direct', 'half'])
 def test_one_metric_and_factorization_per_mp2_group(molecule, monkeypatch,
                                                   scope, with_grad, cache_mode):
-    monkeypatch.setenv('PYSCFAD_LNO_SHARED_LOCAL_DF_CACHE_MODE', cache_mode)
+    if cache_mode is None:
+        monkeypatch.delenv('PYSCFAD_LNO_SHARED_LOCAL_DF_CACHE_MODE', raising=False)
+    else:
+        monkeypatch.setenv('PYSCFAD_LNO_SHARED_LOCAL_DF_CACHE_MODE', cache_mode)
     mf = _mf(molecule)
     static = (dlno_stc.build_domain_selections(
         mf, frozen=1, force_full_domains=True, boys_grouping='molecule')

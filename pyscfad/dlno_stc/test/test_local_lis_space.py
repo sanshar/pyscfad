@@ -105,9 +105,8 @@ def test_domain_selection_keeps_targets_and_stays_in_ed(molecular_case, monkeypa
 
 def test_domain_gradient_finite_difference_and_forward_one_pass(molecular_case, monkeypatch):
     case = molecular_case
-    # The public domain mode enables shared H_ED reuse without environment switches.
-    for name in ('PYSCFAD_LNO_SHARED_LOCAL_DF_CACHE_MODE',):
-        monkeypatch.delenv(name, raising=False)
+    # Opt into shared H_ED reuse for the single-pass checks.
+    monkeypatch.setenv('PYSCFAD_LNO_SHARED_LOCAL_DF_CACHE_MODE', 'half')
     from pyscfad.lno.ccsd import RCCSD
     monkeypatch.setattr(RCCSD, 'conv_tol', 1e-11)
     monkeypatch.setattr(RCCSD, 'conv_tol_normt', 1e-9)

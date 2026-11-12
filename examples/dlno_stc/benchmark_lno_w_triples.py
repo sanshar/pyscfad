@@ -78,8 +78,8 @@ def main():
     parser.add_argument("--df-memory-mb", type=float, default=4000,
                         help="working-memory budget for streamed DF operations")
     parser.add_argument("--fragment-df-mode", choices=("direct", "half"),
-                        default=os.environ.get('PYSCFAD_LNO_SHARED_LOCAL_DF_CACHE_MODE', 'half'),
-                        help="regenerate local integrals or retain H_ED for one-pass reuse (default)")
+                        default=os.environ.get('PYSCFAD_LNO_SHARED_LOCAL_DF_CACHE_MODE', 'direct'),
+                        help="regenerate local integrals (default) or retain H_ED for one-pass reuse")
     parser.add_argument("--cc-conv-tol", type=float, default=1e-7)
     parser.add_argument("--cc-conv-tol-normt", type=float, default=1e-5)
     parser.add_argument("--lno-thresh-occ", type=float, default=1e-4,

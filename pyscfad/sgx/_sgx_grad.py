@@ -73,6 +73,8 @@ def _grid_plan(nao, natm, ngrids, nset, grad, threads, workspace, headroom,
 class _SGXData(sgx_jk.SGXData):
     """PySCF's sparse/native kernels with bounded grid panels and reusable LU."""
     def get_loop_data(self, nset=1, with_pair_mask=True, grad=False):
+        # PySCF subtracts current RSS; refresh after J and cache allocations.
+        self.max_memory = lib.current_memory()[0] + self._response_workspace_bytes / 1e6
         nbins, mask, pairs, loc, native_block = super().get_loop_data(nset, with_pair_mask, grad)
         from pyscfad.lib import _scf_response_cache
         from pyscfad.lib import _solver_memory

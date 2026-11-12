@@ -89,12 +89,12 @@ including MPI owner jobs and saved-packet replay. Positive definiteness is
 checked by the retained factorization, without a separate validation build.
 Cached system factors use a dimension check to reject rank-reduced fitting
 sources. Domain MP2 now uses the same `half`/`direct` cache setting as CCSD(T),
-including MPI owner jobs and saved-packet replay. The default `half` mode retains
-H through the coefficient pullback, reducing ordinary three-center integral
-generation from two passes to one per energy/gradient group. H is released
-before the deferred geometry contraction. Set
-`PYSCFAD_LNO_SHARED_LOCAL_DF_CACHE_MODE=direct` to regenerate integrals with
-lower resident memory. System MP2 retains its existing cached-factor/direct
+including MPI owner jobs and saved-packet replay. The default `direct` mode
+regenerates local integrals without retaining H. Set
+`PYSCFAD_LNO_SHARED_LOCAL_DF_CACHE_MODE=half` to retain H through the coefficient
+pullback, reducing ordinary three-center integral generation from two passes
+to one per energy/gradient group. H is released before the deferred geometry
+contraction. System MP2 retains its existing cached-factor/direct
 streaming policy without an H cache. Local integral response finishes before
 common/Fock/SCF response in both modes.
 
@@ -138,13 +138,13 @@ are generated locally in bounded shell tiles and are never cached on disk.
 Fragment DF has two modes, selected by
 `PYSCFAD_LNO_SHARED_LOCAL_DF_CACHE_MODE` (benchmark: `--fragment-df-mode`):
 
-- `half` (default, option 2): one integral-generation pass per domain group.
+- `half` (opt-in, option 2): one integral-generation pass per domain group.
   Retain `H_ED[P,mu,p] = sum_nu (P|mu nu) C_ED[nu,p]` and fitted `B_ED,ov`.
   Each LIS lies in its occupied/virtual ED parent span, so `H_LIS = H_ED U`.
   Its fitted oo/ov/vv blocks and both coefficient-response legs use this H.
   The current LIS H/output is released after its correction; ED H and MP2
   factors remain live through the W/MP2 pullback. No `A_ED` is retained.
-- `direct` (option 1): regenerate integrals for each ED/LIS forward transform
+- `direct` (default, option 1): regenerate integrals for each ED/LIS forward transform
   and coefficient pullback. One ED and one LIS require four passes for an
   energy plus gradient; a group with `k` LIS solves requires `2*(1+k)`.
   Forward-only execution needs `1+k` passes.

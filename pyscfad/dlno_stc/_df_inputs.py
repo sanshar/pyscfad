@@ -3,14 +3,14 @@ import os
 
 
 def cache_mode():
-    mode = os.environ.get('PYSCFAD_LNO_SHARED_LOCAL_DF_CACHE_MODE', 'half').lower()
+    mode = os.environ.get('PYSCFAD_LNO_SHARED_LOCAL_DF_CACHE_MODE', 'direct').lower()
     if mode not in ('direct', 'half'):
         raise ValueError('PYSCFAD_LNO_SHARED_LOCAL_DF_CACHE_MODE must be direct or half')
     return mode
 
 
 def configure_cache(scope, static=None):
-    """Retain H for domain MP2 and optional LIS consumers of the same frame."""
+    """Configure optional H reuse for domain MP2 and LIS consumers of the same frame."""
     if static is not None:
         from .lis import _validate_lis_space
         _validate_lis_space(static.lis_static.lis_space)

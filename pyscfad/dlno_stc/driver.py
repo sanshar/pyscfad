@@ -10,6 +10,7 @@ from contextlib import contextmanager, nullcontext, ExitStack
 import gc
 import math
 import warnings
+from time import perf_counter
 
 import jax
 import numpy
@@ -428,16 +429,28 @@ def _run_domain(initializer, static, controls, comm, *, with_grad, include_hf=Fa
     if comm is not None:
         groups, pairs = comm.bcast((groups, pairs), root=0)
     settings = allocate_domain_controls(controls, len(groups)) if rank == 0 else None
-    for group in groups:
+    report = rank == 0 and getattr(state["mf"], "verbose", 0) >= lib.logger.INFO
+    if report:
+        lib.logger.info(state["mf"], "Domain MP2: domains=%d, weak pairs=%d", len(groups), len(pairs))
+    for number, group in enumerate(groups, 1):
+        started = perf_counter()
         fragment_id = group.representative_index
         with ExitStack() as resources:
             shared = _root_call(comm, rank, lambda: resources.enter_context(
                 _mp2_df_scope(state, static.fragments[fragment_id].extended_atoms)),
                 f"group {fragment_id} DF setup")
+            if report:
+                fragment = static.fragments[fragment_id]
+                lib.logger.info(state["mf"],
+                    "Domain %d/%d: nao=%d nocc=%d nvirt=%d naux=%d targets=%d",
+                    number, len(groups), shared.mol.nao,
+                    len(fragment.strong_occ_metric_keep), len(fragment.virtual_anchor_columns),
+                    shared.auxmol.nao, len(group.target_indices))
             with resource_profile.section('stc.domain.prepare'):
                 prepared = _root_call(comm, rank,
                     lambda: _prepare(state, static, group, controls, with_grad),
                     f"group {fragment_id} preparation")
+            prepared_at = perf_counter()
             metadata = ({"fragment_id": fragment_id, "target_indices": group.target_indices,
                          "fragment_indices": group.fragment_indices,
                          "global_target_orbitals": tuple(int(static.frag_lolist[i][0])
@@ -449,6 +462,7 @@ def _run_domain(initializer, static, controls, comm, *, with_grad, include_hf=Fa
             with resource_profile.section('stc.domain.native'):
                 result = run_backend(prepared[1] if rank == 0 else None, metadata, settings,
                                      partial(backend.solve, with_grad=with_grad), comm=comm)
+            solved_at = perf_counter()
 
             def apply_group():
                 if with_grad:
@@ -460,9 +474,22 @@ def _run_domain(initializer, static, controls, comm, *, with_grad, include_hf=Fa
 
             with resource_profile.section('stc.domain.input_pullback'):
                 _root_call(comm, rank, apply_group, f"group {fragment_id} pullback")
+            response_at = perf_counter()
+            domain_energy = float(result["energy"]) if report else None
         del prepared, result, apply_group
         gc.collect()
+        if report:
+            response = ("; local response=%.2f s" % (response_at-solved_at)
+                        if with_grad else "")
+            lib.logger.info(state["mf"],
+                "Domain %d/%d: E_corr(strong)=%.12f Ha; prepare=%.2f s; %s=%.2f s%s; total=%.2f s",
+                number, len(groups), domain_energy, prepared_at-started,
+                "solve+adjoint" if with_grad else "solve", solved_at-prepared_at,
+                response, perf_counter()-started)
     if pairs:
+        weak_started = perf_counter()
+        if report:
+            lib.logger.info(state["mf"], "Evaluating %d weak pairs...", len(pairs))
         def apply_weak():
             if with_grad:
                 energy, bars = _weak_energy_and_grad(state, static, pairs)
@@ -472,15 +499,25 @@ def _run_domain(initializer, static, controls, comm, *, with_grad, include_hf=Fa
                     state["mf"], state["common"], static, pairs=pairs)
             state["energy"] = state["energy"] + energy
             jax.block_until_ready((state["energy"], state["mf_bar"], state["common_bar"]))
+            if report:
+                lib.logger.info(state["mf"], "Weak-pair E_corr=%.12f Ha; final weak stage=%.2f s",
+                                float(energy), perf_counter()-weak_started)
         with resource_profile.section('stc.domain.weak'):
             _root_call(comm, rank, apply_weak, "weak endpoint response")
         del apply_weak
         if not with_grad:
             # The gradient helper already collects after releasing its tapes.
             gc.collect()
+    final_started = perf_counter()
+    if report and with_grad:
+        lib.logger.info(state["mf"], "Final common/orbital/SCF gradient response...")
     with resource_profile.section('stc.domain.response'):
-        return _root_call(comm, rank, lambda: _finish(state, with_grad=with_grad,
-                         include_hf=include_hf), "final response")
+        result = _root_call(comm, rank, lambda: _finish(state, with_grad=with_grad,
+                           include_hf=include_hf), "final response")
+    if report and with_grad:
+        lib.logger.info(state["mf"], "Final gradient response completed in %.2f s",
+                        perf_counter()-final_started)
+    return result
 
 
 def _select_scope(static, scope, frozen, lo_kwargs=None):

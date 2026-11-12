@@ -114,8 +114,7 @@ selected environment as described in the build instructions.
 
 The current branch also supports resident half-transformed DF inputs. Set
 `PYSCFAD_LNO_SHARED_LOCAL_DF_CACHE_MODE=half` to enable them for this example;
-the core driver defaults to `half`, while these launchers retain the measured
-lower-memory `direct` policy. Both modes share the local integral adjoints.
+the core driver and these launchers default to the lower-memory `direct` policy. Both modes share the local integral adjoints.
 Resident inputs consume additional memory and are admitted under the process
 allowance; the core README documents their sizes and optional cap.
 

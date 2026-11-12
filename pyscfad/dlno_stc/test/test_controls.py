@@ -49,7 +49,8 @@ def test_high_level_budget_reaches_solver_without_mutating_caller(monkeypatch, s
         received.append(solve_controls.copy())
         return {'energy': np.float64(-1), 'energy_standard_error': 0.}
     monkeypatch.setattr(driver, 'run_backend', solver)
-    static = SimpleNamespace(fragments=(None, None), frag_lolist=((0,), (1,)))
+    static = SimpleNamespace(fragments=(SimpleNamespace(extended_atoms=()),)*2,
+                             frag_lolist=((0,), (1,)))
     value = driver.kernel(None, static if scope == 'domain' else None, scope=scope, controls=controls)
     assert value == (-2.25 if scope == 'domain' else -1.)
     assert len(received) == (2 if scope == 'domain' else 1)
